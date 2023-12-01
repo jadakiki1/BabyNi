@@ -8,8 +8,9 @@ using System.Text.RegularExpressions;
 using System.Globalization;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
+using System.Text;
 
-namespace ParserFromTxtToCsv
+namespace BabyNi
 {
     public class File4
     {
@@ -28,9 +29,11 @@ namespace ParserFromTxtToCsv
 
             this.watcher.Created += (sender, e) =>
             {
+
+                Thread.Sleep(10);
                 if (e.Name.StartsWith("SOEM1_TN_RFInputPower"))
                 {
-                    Console.WriteLine($"Converted Successfully");
+                    
                     ConvertAnotherTextToCsv(e.FullPath);
                 }
             };
@@ -48,100 +51,87 @@ namespace ParserFromTxtToCsv
 
             var csvFilePath = Path.Combine(outputFolderPath, Path.GetFileNameWithoutExtension(txtFilePath) + ".csv");
 
-            using (var writer = new StreamWriter(csvFilePath))
+            var lines = File.ReadAllLines(txtFilePath);
+            var csvLines = new List<string>();
+            string[] excludedColumns = { "Position", "MeanRxLevel1m", "IdLogNum", "FailureDescription" };
+
+            var header = lines[0].Split(',');
+            int neAliasIndex = Array.IndexOf(header, "NeAlias");
+            int neTypeIndex = Array.IndexOf(header, "NeType");
+            int farEndTidIndex = Array.IndexOf(header, "FarEndTID");
+            int objectIndex = Array.IndexOf(header, "Object");
+
+            if (neAliasIndex == -1 || neTypeIndex == -1 || objectIndex == -1)
             {
-                var lines = File.ReadAllLines(txtFilePath);
-                string[] excludedColumns = { "position", "MeanRxLevel1m", "IdLogNum", "FailureDescription" };
+                throw new Exception("NeAlias, NeType or Object column not found.");
+            }
 
-                var header = lines[0].Split(',');
-                int neAliasIndex = Array.IndexOf(header, "NeAlias");
-                int neTypeIndex = Array.IndexOf(header, "NeType");
-                int farEndTidIndex = Array.IndexOf(header, "FarEndTID");
-                int objectIndex = Array.IndexOf(header, "Object");
+            var dateTimePart = ExtractDateTimeFromFilename(Path.GetFileName(txtFilePath));
+            DateTime test = DateTime.ParseExact(dateTimePart, "dd-MM-yyyy HH:mm:ss", null);
 
-                if (neAliasIndex == -1 || neTypeIndex == -1 || objectIndex == -1)
+            // Header line for CSV
+            var csvHeaderLine = "Network_SID,DateTime_Key," + String.Join(",", header.Where(c => !excludedColumns.Contains(c, StringComparer.OrdinalIgnoreCase))) + ",Slot,Port";
+            csvLines.Add(csvHeaderLine);
+
+            foreach (var line in lines.Skip(1)) // Skip the header line
+            {
+                var rowData = line.Split(',');
+
+                if (farEndTidIndex != -1 && rowData[farEndTidIndex].Trim() == "----")
                 {
-                    throw new Exception("NeAlias, NeType or Object column not found.");
+                    continue;
                 }
 
-                // Extract datetime part from the filename
-                var dateTimePart = ExtractDateTimeFromFilename(Path.GetFileName(txtFilePath));
+                string neAliasValue = rowData[neAliasIndex];
+                string neTypeValue = rowData[neTypeIndex];
+                int networkSidHash = (neAliasValue + neTypeValue).GetHashCode();
+                string networkSid = unchecked(networkSidHash == int.MinValue ? "0" : Math.Abs(networkSidHash).ToString());
 
-                // Write the 'Network_SID' and 'DateTime_Key' headers first, then the rest of the headers
-                writer.Write("Network_SID,DateTime_Key,");
-                foreach (var column in header.Where(c => !excludedColumns.Contains(c)))
+                var csvLine = new StringBuilder();
+                csvLine.Append(networkSid).Append(",");
+                csvLine.Append(test.ToString()).Append(",");
+
+                foreach (var columnValue in rowData.Where((value, index) => !excludedColumns.Contains(header[index])))
                 {
-                    writer.Write(column + ",");
+                    csvLine.Append(columnValue).Append(",");
                 }
-                writer.WriteLine("Slot,Port"); // Finish the header line
 
-                // Write the rows
-                foreach (var line in lines.Skip(1)) // Skip the header line
+                // Process Object values for Slot and Port
+                var objectValue = rowData[objectIndex];
+                var slotValue = "";
+                var portValue = "";
+
+                if (objectValue.Contains("/"))
                 {
-                    var rowData = line.Split(',');
+                    var endIndex = objectValue.Contains(".") ? objectValue.IndexOf(".") : objectValue.Length;
+                    slotValue = objectValue.Substring(0, endIndex).Split('+').First() + "+"; // Extracting first slot only
 
-                    // Skip rows with "----" in the FarEndTID column
-                    if (farEndTidIndex != -1 && rowData[farEndTidIndex].Trim() == "----")
+                    var parts = objectValue.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length > 1)
                     {
-                        continue; // Skip this record
-                    }
-
-                    // Calculate Network_SID based on NeAlias and NeType
-                    string neAliasValue = rowData[neAliasIndex];
-                    string neTypeValue = rowData[neTypeIndex];
-                    int networkSidHash = (neAliasValue + neTypeValue).GetHashCode();
-                    string networkSid = unchecked(networkSidHash == int.MinValue ? "0" : Math.Abs(networkSidHash).ToString());
-
-
-                    // Write the Network_SID and DateTime_Key first
-                    writer.Write(networkSid.ToString() + ",");
-                    writer.Write(dateTimePart + ",");
-
-                    // Write the rest of the data, excluding the specific columns
-                    foreach (var columnValue in rowData.Where((value, index) => !excludedColumns.Contains(header[index])))
-                    {
-                        writer.Write(columnValue + ",");
-                    }
-                    var objectValue = rowData[objectIndex];
-                    var slotValue = "";
-                    var portValue = "";
-                    if (objectValue.Contains("/"))
-                    {
-                        var endIndex = objectValue.Contains(".") ? objectValue.IndexOf(".") : objectValue.Length;
-                        slotValue = objectValue.Substring(0, endIndex) + "+";
-
-                        // Extract the Port value
-                        var parts = objectValue.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length > 1)
+                        var portParts = parts[1].Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (portParts.Length > 0)
                         {
-                            var portParts = parts[1].Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-                            if (portParts.Length > 0)
-                            {
-                                portValue = portParts[0]; // Get the number after the "."
-                            }
+                            portValue = portParts[0];
                         }
                     }
-
-                    writer.Write(slotValue + ","); // Write the Slot value
-                    writer.WriteLine(portValue);
-
-
-                    try
-                    {
-                        string connectionString = _configuration.GetConnectionString("VerticaConnection");
-                        string tableName = "SOEM1_TN_RFInputPower";
-
-                        DataLoader loader = new DataLoader(connectionString);
-                        loader.LoadData(csvFilePath, tableName);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Failed to load data to Vertica: {ex.Message}");
-                    }
-
-                    processedFiles.Add(Path.GetFileName(txtFilePath));
                 }
+
+                csvLine.Append(slotValue).Append(",");
+                csvLine.Append(portValue);
+
+                csvLines.Add(csvLine.ToString());
+
+                
             }
+
+            File.WriteAllLines(csvFilePath, csvLines);
+
+            LoadDataIntoDatabase(csvFilePath);
+
+            AggregateData();
+
+            
         }
     
         private string ExtractDateTimeFromFilename(string filename)
@@ -162,6 +152,27 @@ namespace ParserFromTxtToCsv
             DateTime timeValue = DateTime.ParseExact(timePart, "HHmmss", CultureInfo.InvariantCulture);
 
             return $"{dateValue:dd-MM-yyyy} {timeValue:HH:mm:ss}";
+        }
+
+        private void LoadDataIntoDatabase(string csvFilePath)
+        {
+            string connectionString = _configuration.GetConnectionString("VerticaConnection");
+            string tableName = "TRANS_MW_ERC_PM_WAN_RFINPUTPOWER";
+
+            DataLoader loader = new DataLoader(connectionString);
+            loader.LoadData(csvFilePath, tableName);
+
+
+        }
+
+        private void AggregateData()
+        {
+            string connectionString = _configuration.GetConnectionString("VerticaConnection");
+
+            Aggregator aggregator = new Aggregator(connectionString);
+            aggregator.AggregateDataHourly();
+            aggregator.AggregateDataDaily();
+
         }
 
     }

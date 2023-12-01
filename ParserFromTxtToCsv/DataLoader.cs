@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Data.Odbc;
 
-namespace ParserFromTxtToCsv
+namespace BabyNi
 {
     public class DataLoader
     {

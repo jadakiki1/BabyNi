@@ -1,6 +1,8 @@
-using ParserFromTxtToCsv;
+using BabyNi;
 using System.IO;
 using System.Collections.Generic; // Needed for HashSet
+using Microsoft.AspNetCore.Builder; // Required for UseCors
+using Microsoft.Extensions.DependencyInjection; // Required for AddCors
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +14,17 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<IConfiguration>(configuration);
 
+// Configure CORS
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(builder =>
+    {
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader();
+    });
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -19,6 +32,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Use CORS policy
+app.UseCors();
 
 // Shared FileSystemWatcher
 var watcher = new FileSystemWatcher(@"C:\Users\User\Desktop\Baby Ni\BackEnd\Watcher")
@@ -47,13 +63,13 @@ watcher.Created += (sender, e) =>
 watcher.Renamed += (sender, e) =>
 {
     Console.WriteLine($"File renamed: {e.FullPath}");
-    // Additional logic if needed
+    
 };
 
 watcher.Deleted += (sender, e) =>
 {
     Console.WriteLine($"File deleted: {e.FullPath}");
-    // Remove the file name from processedFiles set
+    
 };
 
 // Pass the FileSystemWatcher and HashSet instance to the middleware
@@ -62,4 +78,5 @@ app.UseMiddleware<File4>(watcher, processedFiles, @"C:\Users\User\Desktop\Baby N
 
 app.UseAuthorization();
 app.MapControllers();
+app.UseCors();
 app.Run();

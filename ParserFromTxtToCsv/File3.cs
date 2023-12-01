@@ -9,8 +9,9 @@ using System.Globalization;
 using System.Collections.Generic;
 using Vertica.Data.Internal.DotNetDSI;
 using Microsoft.Extensions.Configuration;
+using System.Text;
 
-namespace ParserFromTxtToCsv
+namespace BabyNi
 {
     public class File3
     {
@@ -30,11 +31,14 @@ namespace ParserFromTxtToCsv
            
             this.watcher.Created += (sender, e) =>
             {
-                if (e.Name.StartsWith("SOEM1_TN_RADIO_LINK_POWER"))
-                {
-                    Console.WriteLine($"Converted Successfully");
-                    ConvertTextToCsv(e.FullPath);
-                }
+               Thread.Sleep(10);
+
+                    if (e.Name.StartsWith("SOEM1_TN_RADIO_LINK_POWER"))
+                    {
+
+                        ConvertTextToCsv(e.FullPath);
+                    }
+                
             };
         }
 
@@ -50,9 +54,8 @@ namespace ParserFromTxtToCsv
 
             var csvFilePath = Path.Combine(outputFolderPath, Path.GetFileNameWithoutExtension(txtFilePath) + ".csv");
 
-            using (var writer = new StreamWriter(csvFilePath))
-            {
                 var lines = File.ReadAllLines(txtFilePath);
+                var csvLines = new List<string>();
                 string[] excludedColumns = { "nodename", "position", "IDLOGNUM" };
 
                 var header = lines[0].Split(',');
@@ -69,16 +72,9 @@ namespace ParserFromTxtToCsv
                 // Extract datetime part from the filename
                 var dateTimePart = ExtractDateTimeFromFilename(Path.GetFileName(txtFilePath));
 
-                // Write the new "NETWORK_SID" and "DATETIME STAMP" column headers
-                writer.Write("Network_SID,DateTime_Key,");
+                var csvHeaderLine = "Network_SID,DateTime_Key," + String.Join(",", header.Where(c => !excludedColumns.Contains(c, StringComparer.OrdinalIgnoreCase))) + ",Link,TID,FarEndTID,Slot,Port";
+                csvLines.Add(csvHeaderLine);
 
-                foreach (var column in header.Where(c => !excludedColumns.Contains(c, StringComparer.OrdinalIgnoreCase)))
-                {
-                    writer.Write(column + ",");
-                }
-
-                writer.WriteLine("Link,TID,FarEndTID,Slot,Port");
-                
 
                 foreach (var line in lines.Skip(1)) // Skip the header line
                 {
@@ -106,43 +102,35 @@ namespace ParserFromTxtToCsv
 
                     foreach (var slot in slots)
                     {
-                        writer.Write(networkSid.ToString() + ",");
-                        writer.Write(dateTimePart + ",");
+                        var csvLine = new StringBuilder();
+                        csvLine.Append(networkSid.ToString()).Append(",");
+                        csvLine.Append(dateTimePart).Append(",");
 
                         // Write the existing data, including the 'Object' column
                         foreach (var columnValue in rowData.Where((value, index) => !excludedColumns.Contains(header[index], StringComparer.OrdinalIgnoreCase)))
                         {
-                            writer.Write(columnValue + ",");
+                        csvLine.Append(columnValue).Append(",");
                         }
 
                         // Write the 'Link', 'TID', 'FarEndTID', and 'Slot' values
-                        writer.Write(linkValue + ",");
-                        writer.Write(tidValue + ",");
-                        writer.Write(farEndTidValue + ",");
-                        writer.Write(slot + ",");
-                        writer.Write(port);
+                        csvLine.Append(linkValue).Append(",");
+                        csvLine.Append(tidValue).Append(",");
+                        csvLine.Append(farEndTidValue).Append(",");
+                        csvLine.Append(slot).Append(",");
+                        csvLine.Append(port);
 
-                        writer.WriteLine();
-                       
+                        csvLines.Add(csvLine.ToString());
 
-                        try
-                        {
-                            string connectionString = _configuration.GetConnectionString("VerticaConnection");
-                            string tableName = "SOEM1_TN_RADIO_LINK_POWER";
-
-                            DataLoader loader = new DataLoader(connectionString);
-                            loader.LoadData(csvFilePath, tableName);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"Failed to load data to Vertica: {ex.Message}");
-                        }
-
-                        processedFiles.Add(Path.GetFileName(txtFilePath));
                     }
 
                 }
-            }
+
+            File.WriteAllLines(csvFilePath, csvLines);
+
+            LoadDataIntoDatabase(csvFilePath);
+
+            AggregateData();
+ 
         }
 
 
@@ -243,6 +231,49 @@ namespace ParserFromTxtToCsv
 
             return string.Empty; // If the structure is not as expected, return an empty string
         }
-        
+
+        private void LoadDataIntoDatabase(string csvFilePath)
+        {
+            string connectionString = _configuration.GetConnectionString("VerticaConnection");
+            string tableName = "TRANS_MW_ERC_PM_TN_RADIO_LINK_POWER";
+
+            DataLoader loader = new DataLoader(connectionString);
+            loader.LoadData(csvFilePath, tableName);
+        }
+
+        private void AggregateData()
+        {
+            string connectionString = _configuration.GetConnectionString("VerticaConnection");
+
+            Aggregator aggregator = new Aggregator(connectionString);
+            aggregator.AggregateDataHourly();
+            aggregator.AggregateDataDaily();
+        }
+
+        private bool IsFileProcessed(string fileName)
+        {
+            return processedFiles.Contains(fileName);
+        }
+
+        private void OnFileDropped(object sender, FileSystemEventArgs e)
+        {
+            string specificFileName = "SOEM1_TN_RADIO_LINK_POWER_20200312_001500.txt";
+            if (e.ChangeType == WatcherChangeTypes.Created && e.Name == specificFileName)
+            {
+                if (IsFileProcessed(e.Name))
+                {
+                    Console.WriteLine($"File already processed: {e.Name}");
+                    // Optionally handle reprocessing here
+                }
+                else
+                {
+                    ConvertTextToCsv(e.FullPath);
+                    // Mark the file as processed
+                    processedFiles.Add(e.Name);
+                }
+            }
+        }
+
+
     }
 }
