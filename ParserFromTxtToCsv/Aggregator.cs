@@ -21,14 +21,14 @@ namespace BabyNi
                     conn.Open();
                     string aggregateQueryHourly = @"
                         INSERT INTO TRANS_MW_AGG_SLOT_HOURLY(
-                            Time,
+                            Datetime_key,
                             NeAlias,
                             NeType,
                             RFInputPower,
                             MaxRxLevel,
                             RSL_Deviation)
                         SELECT 
-                            date_trunc('hour', rp.Time) as Time,
+                            date_trunc('hour', rp.Datetime_key) as Datetime_key,
                             rf.NeAlias,
                             rf.NeType,
                             Max(rp.MaxRxLevel) as MaxRxLevel,
@@ -37,7 +37,7 @@ namespace BabyNi
                         FROM  TRANS_MW_ERC_PM_WAN_RFINPUTPOWER rf
                         INNER JOIN TRANS_MW_ERC_PM_TN_RADIO_LINK_POWER rp 
                         ON rf.NeAlias = rp.NeAlias AND rf.NeType = rp.NeType
-                        GROUP BY date_trunc('hour', rp.Time), rf.NeAlias, rf.NeType;";
+                        GROUP BY date_trunc('hour', rp.Datetime_key), rf.NeAlias, rf.NeType;";
 
                     using (OdbcCommand cmd = new OdbcCommand(aggregateQueryHourly, conn))
                     {
@@ -65,14 +65,14 @@ namespace BabyNi
                     conn.Open();
                     string aggregateQueryDaily = @"
                         INSERT INTO TRANS_MW_AGG_SLOT_DAILY(
-                            Time,
+                            Datetime_key,
                             NeAlias,
                             NeType,
                             RFInputPower,
                             MaxRxLevel,
                             RSL_Deviation)
                         SELECT 
-                            date_trunc('day', rp.Time) as Time,
+                            date_trunc('day', rp.Datetime_key) as Datetime_key,
                             rf.NeAlias,
                             rf.NeType,
                             Max(rp.MaxRxLevel) as MaxRxLevel,
@@ -81,7 +81,7 @@ namespace BabyNi
                         FROM  TRANS_MW_ERC_PM_WAN_RFINPUTPOWER rf
                         INNER JOIN TRANS_MW_ERC_PM_TN_RADIO_LINK_POWER rp 
                         ON rf.NeAlias = rp.NeAlias AND rf.NeType = rp.NeType
-                        GROUP BY date_trunc('day', rp.Time), rf.NeAlias, rf.NeType;";
+                        GROUP BY date_trunc('day', rp.Datetime_key), rf.NeAlias, rf.NeType;";
 
                     using (OdbcCommand cmd = new OdbcCommand(aggregateQueryDaily, conn))
                     {
