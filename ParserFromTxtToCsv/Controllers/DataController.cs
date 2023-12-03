@@ -1,5 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Data.Odbc;
+using Microsoft.AspNetCore.Mvc;
+using System.Collections.Generic;
 
 namespace BabyNi.Controllers
 {
@@ -7,23 +7,30 @@ namespace BabyNi.Controllers
     [ApiController]
     public class DataController : Controller
     {
-
         DataAggregationService dataAggregationService = new DataAggregationService();
-        
 
-
-        [HttpGet("hourly")]
-        public ActionResult<List<AggregatedDataDto>> GetHourlyData()
+        [HttpGet("hourly/{aggType}")]
+        public ActionResult<List<AggregatedDataDto>> GetHourlyData(string aggType)
         {
-            return Ok(dataAggregationService.GetAggregatedData("TRANS_MW_AGG_SLOT_HOURLY"));
+            if (aggType != "NeAlias" && aggType != "NeType")
+            {
+                return BadRequest("Invalid aggregation type. Please use 'NeAlias' or 'NeType'.");
+            }
+
+            var data = dataAggregationService.GetAggregatedData("TRANS_MW_AGG_SLOT_HOURLY", aggType);
+            return Ok(data);
         }
 
-        [HttpGet("daily")]
-        public ActionResult<List<AggregatedDataDto>> GetDailyData()
+        [HttpGet("daily/{aggType}")]
+        public ActionResult<List<AggregatedDataDto>> GetDailyData(string aggType)
         {
-            return Ok(dataAggregationService.GetAggregatedData("TRANS_MW_AGG_SLOT_DAILY"));
-        }
+            if (aggType != "NeAlias" && aggType != "NeType")
+            {
+                return BadRequest("Invalid aggregation type. Please use 'NeAlias' or 'NeType'.");
+            }
 
-        
+            var data = dataAggregationService.GetAggregatedData("TRANS_MW_AGG_SLOT_DAILY", aggType);
+            return Ok(data);
+        }
     }
 }
