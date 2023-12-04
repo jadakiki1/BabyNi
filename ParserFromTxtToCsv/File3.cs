@@ -1,4 +1,4 @@
-﻿using OfficeOpenXml;
+using OfficeOpenXml;
 using System.IO;
 using System.Linq;
 using System;
@@ -59,18 +59,18 @@ namespace BabyNi
                 string[] excludedColumns = { "nodename", "position", "IDLOGNUM" };
 
                 var header = lines[0].Split(',');
+                int timeColumnIndex = Array.IndexOf(header, "Time");
                 int neAliasIndex = Array.IndexOf(header, "NeAlias");
                 int neTypeIndex = Array.IndexOf(header, "NeType");
                 int failureDescriptionIndex = Array.IndexOf(header, "FailureDescription");
                 int objectColumnIndex = Array.IndexOf(header, "Object");
 
-                if (neAliasIndex == -1 || neTypeIndex == -1 || failureDescriptionIndex == -1 || objectColumnIndex == -1)
+                if (timeColumnIndex == -1 || neAliasIndex == -1 || neTypeIndex == -1 || failureDescriptionIndex == -1 || objectColumnIndex == -1)
                 {
-                    throw new Exception("One of the required columns 'NEALIAS', 'NETYPE', 'FAILUREDESCRIPTION', or 'Object' was not found.");
+                    throw new Exception("One of the required columns 'TIME', 'NEALIAS', 'NETYPE', 'FAILUREDESCRIPTION', or 'Object' was not found.");
                 }
 
-                // Extract datetime part from the filename
-                var dateTimePart = ExtractDateTimeFromFilename(Path.GetFileName(txtFilePath));
+
 
                 var csvHeaderLine = "Network_SID,DateTime_Key," + String.Join(",", header.Where(c => !excludedColumns.Contains(c, StringComparer.OrdinalIgnoreCase))) + ",Link,TID,FarEndTID,Slot,Port";
                 csvLines.Add(csvHeaderLine);
@@ -84,7 +84,7 @@ namespace BabyNi
                     if (!rowData[failureDescriptionIndex].Contains("-"))
                         continue;
 
-                    // Compute the "NETWORK_SID"
+                    string timeValue = rowData[timeColumnIndex];
                     string neAliasValue = rowData[neAliasIndex];
                     string neTypeValue = rowData[neTypeIndex];
                     int hash = (neAliasValue + neTypeValue).GetHashCode();
@@ -104,7 +104,7 @@ namespace BabyNi
                     {
                         var csvLine = new StringBuilder();
                         csvLine.Append(networkSid.ToString()).Append(",");
-                        csvLine.Append(dateTimePart).Append(",");
+                        csvLine.Append(timeValue).Append(",");
 
                         // Write the existing data, including the 'Object' column
                         foreach (var columnValue in rowData.Where((value, index) => !excludedColumns.Contains(header[index], StringComparer.OrdinalIgnoreCase)))
@@ -133,26 +133,6 @@ namespace BabyNi
  
         }
 
-
-        private string ExtractDateTimeFromFilename(string filename)
-        {
-            // Pattern matches "YYYYMMDD_HHMMSS" in the filename
-            var match = Regex.Match(filename, @"\d{8}_\d{6}");
-            if (!match.Success)
-            {
-                throw new Exception("Filename does not contain a valid datetime part.");
-            }
-
-            // Extract the date and time parts
-            var datePart = match.Value.Substring(0, 8);
-            var timePart = match.Value.Substring(9, 6);
-
-            // Parse and convert the date and time parts into the required format "dd-MM-yyyy HH:mm:ss"
-            DateTime dateValue = DateTime.ParseExact(datePart, "yyyyMMdd", CultureInfo.InvariantCulture);
-            DateTime timeValue = DateTime.ParseExact(timePart, "HHmmss", CultureInfo.InvariantCulture);
-
-            return $"{dateValue:dd-MM-yyyy} {timeValue:HH:mm:ss}";
-        }
 
         private string ProcessObjectColumn(string objectValue)
         {
