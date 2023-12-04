@@ -1,4 +1,4 @@
-﻿using OfficeOpenXml;
+using OfficeOpenXml;
 using System.IO;
 using System.Linq;
 using System;
@@ -56,20 +56,18 @@ namespace BabyNi
             string[] excludedColumns = { "Position", "MeanRxLevel1m", "IdLogNum", "FailureDescription" };
 
             var header = lines[0].Split(',');
+            int timeColumnIndex = Array.IndexOf(header, "Time");
             int neAliasIndex = Array.IndexOf(header, "NeAlias");
             int neTypeIndex = Array.IndexOf(header, "NeType");
             int farEndTidIndex = Array.IndexOf(header, "FarEndTID");
             int objectIndex = Array.IndexOf(header, "Object");
 
-            if (neAliasIndex == -1 || neTypeIndex == -1 || objectIndex == -1)
+            if (timeColumnIndex == -1 || neAliasIndex == -1 || neTypeIndex == -1 || objectIndex == -1)
             {
-                throw new Exception("NeAlias, NeType or Object column not found.");
+                throw new Exception("TIME,NeAlias, NeType or Object column not found.");
             }
 
-            var dateTimePart = ExtractDateTimeFromFilename(Path.GetFileName(txtFilePath));
-            DateTime test = DateTime.ParseExact(dateTimePart, "dd-MM-yyyy HH:mm:ss", null);
-
-            // Header line for CSV
+           
             var csvHeaderLine = "Network_SID,DateTime_Key," + String.Join(",", header.Where(c => !excludedColumns.Contains(c, StringComparer.OrdinalIgnoreCase))) + ",Slot,Port";
             csvLines.Add(csvHeaderLine);
 
@@ -82,6 +80,7 @@ namespace BabyNi
                     continue;
                 }
 
+                string timeValue = rowData[timeColumnIndex];
                 string neAliasValue = rowData[neAliasIndex];
                 string neTypeValue = rowData[neTypeIndex];
                 int networkSidHash = (neAliasValue + neTypeValue).GetHashCode();
@@ -89,7 +88,7 @@ namespace BabyNi
 
                 var csvLine = new StringBuilder();
                 csvLine.Append(networkSid).Append(",");
-                csvLine.Append(test.ToString()).Append(",");
+                csvLine.Append(timeValue).Append(",");
 
                 foreach (var columnValue in rowData.Where((value, index) => !excludedColumns.Contains(header[index])))
                 {
@@ -101,10 +100,15 @@ namespace BabyNi
                 var slotValue = "";
                 var portValue = "";
 
-                if (objectValue.Contains("/"))
+                if (objectValue.Contains("."))
                 {
-                    var endIndex = objectValue.Contains(".") ? objectValue.IndexOf(".") : objectValue.Length;
-                    slotValue = objectValue.Substring(0, endIndex).Split('+').First() + "+"; // Extracting first slot only
+                    var preDotPart = objectValue.Split('.')[0];
+
+                    var lastSlashIndex = preDotPart.LastIndexOf('/');
+                    if (lastSlashIndex != -1 && lastSlashIndex < preDotPart.Length - 1)
+                    {
+                        slotValue = preDotPart.Substring(lastSlashIndex + 1);
+                    }
 
                     var parts = objectValue.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length > 1)
@@ -114,6 +118,14 @@ namespace BabyNi
                         {
                             portValue = portParts[0];
                         }
+                    }
+                }
+                else
+                {
+                    if (objectValue.Contains("/"))
+                    {
+                        var endIndex = objectValue.Contains(".") ? objectValue.IndexOf(".") : objectValue.Length;
+                        slotValue = objectValue.Substring(0, endIndex).Split('+').First() + "+";
                     }
                 }
 
@@ -132,26 +144,6 @@ namespace BabyNi
             AggregateData();
 
             
-        }
-    
-        private string ExtractDateTimeFromFilename(string filename)
-        {
-            // Pattern matches "YYYYMMDD_HHMMSS" in the filename
-            var match = Regex.Match(filename, @"\d{8}_\d{6}");
-            if (!match.Success)
-            {
-                throw new Exception("Filename does not contain a valid datetime part.");
-            }
-
-            // Extract the date and time parts
-            var datePart = match.Value.Substring(0, 8);
-            var timePart = match.Value.Substring(9, 6);
-
-            // Parse and convert the date and time parts into the required format "dd-MM-yyyy HH:mm:ss"
-            DateTime dateValue = DateTime.ParseExact(datePart, "yyyyMMdd", CultureInfo.InvariantCulture);
-            DateTime timeValue = DateTime.ParseExact(timePart, "HHmmss", CultureInfo.InvariantCulture);
-
-            return $"{dateValue:dd-MM-yyyy} {timeValue:HH:mm:ss}";
         }
 
         private void LoadDataIntoDatabase(string csvFilePath)
