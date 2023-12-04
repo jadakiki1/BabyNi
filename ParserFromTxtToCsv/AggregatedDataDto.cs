@@ -1,3 +1,4 @@
+
 ﻿using System;
 using System.Data.Odbc;
 using System.Collections.Generic;
@@ -38,10 +39,6 @@ namespace BabyNi
                         var data = new AggregatedDataDto
                         {
                             DateTime_Key = reader.GetDateTime(reader.GetOrdinal("DateTime_Key")),
-
-
-                            NeAlias = reader.GetString(reader.GetOrdinal("NeAlias")),
-                            NeType = reader.GetString(reader.GetOrdinal("NeType")),
 
                             RFInputPower = reader.GetDouble(reader.GetOrdinal("RFInputPower")),
                             MaxRxLevel = reader.GetDouble(reader.GetOrdinal("MaxRxLevel")),
