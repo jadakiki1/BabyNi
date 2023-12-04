@@ -30,8 +30,6 @@ namespace BabyNi
 
                 string query = $"SELECT Datetime_key, {aggColumn}, MAX(RFInputPower) as RFInputPower, MAX(MaxRxLevel) as MaxRxLevel, MAX(RSL_Deviation) as RSL_Deviation FROM {tableName} GROUP BY Datetime_key, {aggColumn}";
 
-                string query = $"SELECT DateTime_Key, NeAlias, NeType, RFInputPower, MaxRxLevel, RSL_Deviation FROM {tableName}";
-
                 using (OdbcCommand cmd = new OdbcCommand(query, conn))
                 using (OdbcDataReader reader = cmd.ExecuteReader())
                 {
